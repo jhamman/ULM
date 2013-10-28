@@ -1,0 +1,82 @@
+&CONTROL
+      ! Noah parameters for CONUS project
+      MODEL_DT=3600        ! Model time step length (sec)
+      OUTPUT_DT=86400     ! Output time step length (sec)
+      YEAR0=XYEAR0X
+      MONTH0=XMONTH0X
+      DAY0=01
+      YEAR_FINAL=XYEAR1X
+      MONTH_FINAL=XMONTH1X
+      DAY_FINAL=XDAY1X
+      !------------------------------------------------------------------------
+      ! If PARAM_TYPE is "netcdf", then LSC should contain the name of the
+      ! netcdf-format file containing model parameters, LREAL8 should be .FALSE.,
+      ! and MASK_FILE through SNOALB_FILE should be "".
+      !
+      ! Otherwise, LSC should be "", MASK_FILE should be the name of the file
+      ! containing the land mask (ascii always), and NSOIL_FILE through
+      ! SNOALB_FILE should be the names of the files (ascii or bin) containing
+      ! model parameters.
+      !
+      ! For ascii param files, if there are multiple layers or times (i.e. 3d data),
+      ! each layer should be stored in a separate ascii file.  All the files
+      ! corresponding to that parameter should have the same base name with the
+      ! layer number appended to it (e.g. albedo_ldas.asc01, albedo_ldas.asc02).
+      ! In this case, the base name (e.g. albedo_ldas.asc) should be listed here
+      ! as the parameter file name.  The model driver code will then look for the
+      ! individual files having that base name.
+      !
+      ! LREAL8 should = .TRUE. when PARAM_TYPE = "bin" and the variable type
+      ! is real*8.
+      !
+      ! The variable MODEL_TYPE specifies which extensions should be used for
+      ! snow,soil,veg,etc...They are:
+      ! 0: Noah model
+      ! 1: SAC soil
+      ! 2: PEMB snow model (Anderson)
+      !	3: SAC soil, with PEMB snow model
+      ! For any option using SAC (1 and 3), MAXNSOIL must be set to 2, else 4 
+      PARAM_TYPE='ascii'  ! Format of parameter files; can be one of "ascii","bin","netcdf"
+      LSC=''
+      LREAL8=.FALSE.
+      MASK_FILE='XPARAMDIRX/mask.asc'	
+      NSOIL_FILE='XPARAMDIRX/soillayers.asc'
+      SOILDEPTH_FILE='XPARAMDIRX/soildepth.asc'
+      SOILTYP_FILE='XPARAMDIRX/soil.asc'
+      SLOPETYP_FILE='XPARAMDIRX/slopetype.asc'
+      TBOT_FILE='XPARAMDIRX/soillowertemperature.asc'
+      VEGTYP_FILE='XPARAMDIRX/veg.asc'
+      SHDFAC_FILE='XPARAMDIRX/gfrac.asc'
+      ALBEDO_FILE='XPARAMDIRX/albedo.asc'
+      SNOALB_FILE='XPARAMDIRX/max.snow.albedo.asc'
+      UZTWM_FILE='XPARAMDIRX/uztwm.asc'
+      UZFWM_FILE='XPARAMDIRX/uzfwm.asc'
+      UZK_FILE='XPARAMDIRX/uzk.asc'
+      ZPERC_FILE='XPARAMDIRX/zperc.asc'
+      REXP_FILE='XPARAMDIRX/rexp.asc'
+      LZTWM_FILE='XPARAMDIRX/lztwm.asc'
+      LZFSM_FILE='XPARAMDIRX/lzfsm.asc'
+      LZFPM_FILE='XPARAMDIRX/lzfpm.asc'
+      LZSK_FILE='XPARAMDIRX/lzsk.asc'
+      LZPK_FILE='XPARAMDIRX/lzpk.asc'
+      PFREE_FILE='XPARAMDIRX/pfree.asc'
+      ELEV_FILE='XPARAMDIRX/elev.asc'
+      SNOWBAND_FILE='XPARAMDIRX/snowbands.asc'
+      NBANDS=1            ! If no snowbands file is specified, NBANDS should be 1
+      MODEL_TYPE=1	  ! Specify model extensions to be included: Noah[0],SAC[1],PEMB[2],SAC&PEMB[3]
+      MAXNSOIL=4          ! Maximum number of soil layers; if MODEL_TYPE= 1 or 3:MAXNSOIL=2, else=4
+      NMONTHS=12          ! Number of time values for time-varying params
+      SAC_CONST='XPARAMDIRX/sac_const.txt'
+	!      PE_SCALE='XPARAMDIRX/pescale.asc'	
+	!      PE_ADJ='XPARAMDIRX/peadj.asc'
+      !------------------------------------------------------------------------
+      ICE1=0              ! Ice flag (0 or 1)
+      Z1=10.0             ! Humidity measurement height (m)
+	!      LADJCH=.FALSE
+      INITIAL=''
+	  !INITIAL='/home/raid3/blivneh/unified_model/data/SANDY/output/ulm/state/state.200009.nc'
+      FORCING='XFORCINGDIRX/full_data'
+      RESTART='XRESULTDIRX/state'
+      RESULT='XRESULTDIRX/'
+      COMP_OUTPUT=.TRUE.  ! If .TRUE., compress output data by gathering, i.e. only store data for valid cells
+&END

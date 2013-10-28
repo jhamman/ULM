@@ -1,0 +1,409 @@
+SUBROUTINE READ_INITIAL()
+
+  ! READS INITIAL CONDITIONS
+
+  ! Modifications:
+  ! 2007-Nov-06 Added T12.							Ben Livneh
+  ! 2007-Nov-12 Added LSTSNW.							TJB
+  ! 2008-May-05 Removed T12, for compatibility with NOAH 2.8.                   Ben Livneh
+  ! 2008-May-15 Prints error message and quits if can't open input file.        TJB
+  ! 2008-Jul-15 Added TPACK.							Ben Livneh
+  ! 2008-Jul-24 Added PACH20.							Ben Livneh
+  ! 2008-Aug-12 Removed MAXSMC, etc since not used.				Ben Livneh
+
+  ! driverMod contains definitions of all global driver variables
+  USE driverMod
+
+  IMPLICIT NONE
+
+  ! Define local variables
+  INTEGER ncid,ndims,nvars,ngatts,unlimited
+  INTEGER xdimid,ydimid,zdimid,banddimid
+  INTEGER xlen_initial,ylen_initial,MAXNSOIL_initial,NBANDS_initial
+  INTEGER varid
+  INTEGER J,I,K,L,start3d(3),count3d(3),start4d(4),count4d(4)
+  INTEGER landmask_initial(xlen,ylen)
+  INTEGER land_idx
+  REAL    TEMP(xlen,ylen)
+  INTEGER TEMP_INT(xlen,ylen)
+
+  IF (INITIAL == '') THEN
+
+    ! DEFAULT VALUES
+
+    WRITE (*,*) 'No initial conditions file supplied; using defaults'
+
+    CMC = 3.935729328E-4
+    SNOWH = 1.061008661E-3
+    SNEQV = 2.098197874E-4
+    T1 = 263.68869
+    TPACK = 263.68869
+    PACH20 = 0.0
+    STC(:,:,1) = 266.093506
+    STC(:,:,2) = 274.026123
+    STC(:,:,3) = 276.887146
+    STC(:,:,4) = 279.913513
+    SMC(:,:,1) = 0.298175037
+    SMC(:,:,2) = 0.294000477
+    SMC(:,:,3) = 0.27131775
+    SMC(:,:,4) = 0.307083935
+    SH2O(:,:,1) = 0.161150247
+    SH2O(:,:,2) = 0.26381737
+    SH2O(:,:,3) = 0.27131775
+    SH2O(:,:,4) = 0.307083935
+    SNCOVR = 1.0
+    LSTSNW = 0
+    CH = 1.0e-4
+    CM = 1.0e-4
+
+  ELSE
+
+    ! SPECIFIED VALUES
+
+    WRITE (*,*) 'Reading initial conditions from ',trim(INITIAL)
+
+    status = NF_OPEN(INITIAL, 0, ncid)
+    IF (status .ne. NF_NOERR) THEN
+      WRITE(*,*)'ERROR: cannot open initial condition file',INITIAL
+      STOP
+    END IF
+    status = NF_INQ(ncid, ndims, nvars, ngatts, unlimited)
+    status = NF_INQ_DIMID(ncid,'z',zdimid)
+    status = NF_INQ_DIMID(ncid,'band',zdimid)
+    status = NF_INQ_DIMID(ncid,'y',ydimid)
+    status = NF_INQ_DIMID(ncid,'x',xdimid)
+    status = NF_INQ_DIMLEN(ncid,zdimid,MAXNSOIL_initial)
+    status = NF_INQ_DIMLEN(ncid,banddimid,NBANDS_initial)
+    status = NF_INQ_DIMLEN(ncid,ydimid,ylen_initial)
+    status = NF_INQ_DIMLEN(ncid,xdimid,xlen_initial)
+
+write(*,*)'MAXNSOIL_initial',MAXNSOIL_initial
+write(*,*)'NBANDS_initial',NBANDS_initial
+write(*,*)'ylen_initial',ylen_initial
+write(*,*)'xlen_initial',xlen_initial
+
+    ! Validate data dimensions
+    IF (MAXNSOIL_initial /= MAXNSOIL) THEN
+      WRITE(*,*)'ERROR: MAXNSOIL',MAXNSOIL, &
+        ' (from lsc file ',TRIM(LSC),') /= MAXNSOIL ',MAXNSOIL_initial, &
+        ' (from initial condition file ',TRIM(INITIAL),')'
+      STOP
+    END IF
+    IF (NBANDS_initial /= NBANDS) THEN
+      WRITE(*,*)'ERROR: NBANDS',NBANDS, &
+        ' (from lsc file ',TRIM(LSC),') /= NBANDS ',NBANDS_initial, &
+        ' (from initial condition file ',TRIM(INITIAL),')'
+      STOP
+    END IF
+    IF (ylen_initial /= ylen) THEN
+      WRITE(*,*)'ERROR: ylen',ylen, &
+        ' (from lsc file ',TRIM(LSC),') /= ylen ',ylen_initial, &
+        ' (from initial condition file ',TRIM(INITIAL),')'
+      STOP
+    END IF
+    IF (xlen_initial /= xlen) THEN
+      WRITE(*,*)'ERROR: xlen',xlen, &
+        ' (from lsc file ',TRIM(LSC),') /= xlen ',xlen_initial, &
+        ' (from initial condition file ',TRIM(INITIAL),')'
+      STOP
+    END IF
+    
+    ! Get landmask and compare to landmask from LSC file
+    status = NF_INQ_VARID(ncid,'land',varid)
+    status = NF_GET_VAR_INT(ncid,varid,landmask_initial)
+    DO I=1,ylen
+      DO J=1,xlen
+        IF (landmask_initial(J,I) /= LANDMASK(J,I)) THEN
+          WRITE(*,*)'ERROR: landmask from lsc file ',TRIM(LSC), &
+          ' /= landmask from initial condition file ',TRIM(INITIAL)
+          STOP
+        END IF
+      END DO
+    END DO
+
+    ! Get Soil Moisture Content
+    status = NF_INQ_VARID(ncid,'SMC',varid)
+    DO L = 1, MAXNSOIL
+      DO K = 1, NBANDS
+        start4d(1) = 1
+        start4d(2) = 1
+        start4d(3) = K
+        start4d(4) = L
+        count4d(1) = xlen
+        count4d(2) = ylen
+        count4d(3) = 1
+        count4d(4) = 1
+        status = NF_GET_VARA_REAL(ncid,varid,start4d,count4d,TEMP)
+        land_idx = 1
+        DO I = 1, ylen
+          DO J = 1, xlen
+            IF (LANDMASK(J,I) == 1) THEN
+              SMC(land_idx,K,L) = TEMP(J,I)
+              land_idx = land_idx + 1
+            END IF
+          END DO
+        END DO
+      END DO
+    END DO
+
+    ! Get Soil Liquid Moisture Content
+    status = NF_INQ_VARID(ncid,'SH2O',varid)
+    DO L = 1, MAXNSOIL
+      DO K = 1, NBANDS
+        start4d(1) = 1
+        start4d(2) = 1
+        start4d(3) = K
+        start4d(4) = L
+        count4d(1) = xlen
+        count4d(2) = ylen
+        count4d(3) = 1
+        count4d(4) = 1
+        status = NF_GET_VARA_REAL(ncid,varid,start4d,count4d,TEMP)
+        land_idx = 1
+        DO I = 1, ylen
+          DO J = 1, xlen
+            IF (LANDMASK(J,I) == 1) THEN
+              SH2O(land_idx,K,L) = TEMP(J,I)
+              land_idx = land_idx + 1
+            END IF
+          END DO
+        END DO
+      END DO
+    END DO
+
+    ! Get Soil Temperature
+    status = NF_INQ_VARID(ncid,'STC',varid)
+    DO L = 1, MAXNSOIL
+      DO K = 1, NBANDS
+        start4d(1) = 1
+        start4d(2) = 1
+        start4d(3) = K
+        start4d(4) = L
+        count4d(1) = xlen
+        count4d(2) = ylen
+        count4d(3) = 1
+        count4d(4) = 1
+        status = NF_GET_VARA_REAL(ncid,varid,start4d,count4d,TEMP)
+        land_idx = 1
+        DO I = 1, ylen
+          DO J = 1, xlen
+            IF (LANDMASK(J,I) == 1) THEN
+              STC(land_idx,K,L) = TEMP(J,I)
+              land_idx = land_idx + 1
+            END IF
+          END DO
+        END DO
+      END DO
+    END DO
+
+    ! Get Skin Temperature
+    status = NF_INQ_VARID(ncid,'T1',varid)
+    DO K = 1, NBANDS
+      start3d(1) = 1
+      start3d(2) = 1
+      start3d(3) = K
+      count3d(1) = xlen
+      count3d(2) = ylen
+      count3d(3) = 1
+      status = NF_GET_VARA_REAL(ncid,varid,start3d,count3d,TEMP)
+      land_idx = 1
+      DO I = 1, ylen
+        DO J = 1, xlen
+          IF (LANDMASK(J,I) == 1) THEN
+            T1(land_idx,K) = TEMP(J,I)
+            land_idx = land_idx + 1
+          END IF
+        END DO
+      END DO
+    END DO
+
+    ! Get Snow Pack Temperature
+    status = NF_INQ_VARID(ncid,'TPACK',varid)
+    DO K = 1, NBANDS
+      start3d(1) = 1
+      start3d(2) = 1
+      start3d(3) = K
+      count3d(1) = xlen
+      count3d(2) = ylen
+      count3d(3) = 1
+      status = NF_GET_VARA_REAL(ncid,varid,start3d,count3d,TEMP)
+      land_idx = 1
+      DO I = 1, ylen
+        DO J = 1, xlen
+          IF (LANDMASK(J,I) == 1) THEN
+            TPACK(land_idx,K) = TEMP(J,I)
+            land_idx = land_idx + 1
+          END IF
+        END DO
+      END DO
+    END DO
+
+    ! Get Snow Pack Liquid Water Content
+    status = NF_INQ_VARID(ncid,'PACH20',varid)
+    DO K = 1, NBANDS
+      start3d(1) = 1
+      start3d(2) = 1
+      start3d(3) = K
+      count3d(1) = xlen
+      count3d(2) = ylen
+      count3d(3) = 1
+      status = NF_GET_VARA_REAL(ncid,varid,start3d,count3d,TEMP)
+      land_idx = 1
+      DO I = 1, ylen
+        DO J = 1, xlen
+          IF (LANDMASK(J,I) == 1) THEN
+            PACH20(land_idx,K) = TEMP(J,I)
+            land_idx = land_idx + 1
+          END IF
+        END DO
+      END DO
+    END DO
+
+    ! Get Canopy Moisture
+    status = NF_INQ_VARID(ncid,'CMC',varid)
+    DO K = 1, NBANDS
+      start3d(1) = 1
+      start3d(2) = 1
+      start3d(3) = K
+      count3d(1) = xlen
+      count3d(2) = ylen
+      count3d(3) = 1
+      status = NF_GET_VARA_REAL(ncid,varid,start3d,count3d,TEMP)
+      land_idx = 1
+      DO I = 1, ylen
+        DO J = 1, xlen
+          IF (LANDMASK(J,I) == 1) THEN
+            CMC(land_idx,K) = TEMP(J,I)
+            land_idx = land_idx + 1
+          END IF
+        END DO
+      END DO
+    END DO
+
+    ! Get Snow Pack Depth
+    status = NF_INQ_VARID(ncid,'SNOWH',varid)
+    DO K = 1, NBANDS
+      start3d(1) = 1
+      start3d(2) = 1
+      start3d(3) = K
+      count3d(1) = xlen
+      count3d(2) = ylen
+      count3d(3) = 1
+      status = NF_GET_VARA_REAL(ncid,varid,start3d,count3d,TEMP)
+      land_idx = 1
+      DO I = 1, ylen
+        DO J = 1, xlen
+          IF (LANDMASK(J,I) == 1) THEN
+            SNOWH(land_idx,K) = TEMP(J,I)
+            land_idx = land_idx + 1
+          END IF
+        END DO
+      END DO
+    END DO
+
+    ! Get Snow Pack Water Equivalent
+    status = NF_INQ_VARID(ncid,'SNEQV',varid)
+    DO K = 1, NBANDS
+      start3d(1) = 1
+      start3d(2) = 1
+      start3d(3) = K
+      count3d(1) = xlen
+      count3d(2) = ylen
+      count3d(3) = 1
+      status = NF_GET_VARA_REAL(ncid,varid,start3d,count3d,TEMP)
+      land_idx = 1
+      DO I = 1, ylen
+        DO J = 1, xlen
+          IF (LANDMASK(J,I) == 1) THEN
+            SNEQV(land_idx,K) = TEMP(J,I)
+            land_idx = land_idx + 1
+          END IF
+        END DO
+      END DO
+    END DO
+
+    ! Get Snow Cover Extent
+    status = NF_INQ_VARID(ncid,'SNCOVR',varid)
+    DO K = 1, NBANDS
+      start3d(1) = 1
+      start3d(2) = 1
+      start3d(3) = K
+      count3d(1) = xlen
+      count3d(2) = ylen
+      count3d(3) = 1
+      status = NF_GET_VARA_REAL(ncid,varid,start3d,count3d,TEMP)
+      land_idx = 1
+      DO I = 1, ylen
+        DO J = 1, xlen
+          IF (LANDMASK(J,I) == 1) THEN
+            SNCOVR(land_idx,K) = TEMP(J,I)
+            land_idx = land_idx + 1
+          END IF
+        END DO
+      END DO
+    END DO
+
+    ! Get Last Snow Counter
+    status = NF_INQ_VARID(ncid,'LSTSNW',varid)
+    DO K = 1, NBANDS
+      start3d(1) = 1
+      start3d(2) = 1
+      start3d(3) = K
+      count3d(1) = xlen
+      count3d(2) = ylen
+      count3d(3) = 1
+      status = NF_GET_VARA_INT(ncid,varid,start3d,count3d,TEMP_INT)
+      land_idx = 1
+      DO I = 1, ylen
+        DO J = 1, xlen
+          IF (LANDMASK(J,I) == 1) THEN
+            LSTSNW(land_idx,K) = TEMP_INT(J,I)
+            land_idx = land_idx + 1
+          END IF
+        END DO
+      END DO
+    END DO
+
+    ! Exchange coefficients
+    status = NF_INQ_VARID(ncid,'CH',varid)
+    DO K = 1, NBANDS
+      start3d(1) = 1
+      start3d(2) = 1
+      start3d(3) = K
+      count3d(1) = xlen
+      count3d(2) = ylen
+      count3d(3) = 1
+      status = NF_GET_VARA_REAL(ncid,varid,start3d,count3d,TEMP)
+      land_idx = 1
+      DO I = 1, ylen
+        DO J = 1, xlen
+          IF (LANDMASK(J,I) == 1) THEN
+            CH(land_idx,K) = TEMP(J,I)
+            land_idx = land_idx + 1
+          END IF
+        END DO
+      END DO
+    END DO
+    status = NF_INQ_VARID(ncid,'CM',varid)
+    DO K = 1, NBANDS
+      start3d(1) = 1
+      start3d(2) = 1
+      start3d(3) = K
+      count3d(1) = xlen
+      count3d(2) = ylen
+      count3d(3) = 1
+      status = NF_GET_VARA_REAL(ncid,varid,start3d,count3d,TEMP)
+      land_idx = 1
+      DO I = 1, ylen
+        DO J = 1, xlen
+          IF (LANDMASK(J,I) == 1) THEN
+            CM(land_idx,K) = TEMP(J,I)
+            land_idx = land_idx + 1
+          END IF
+        END DO
+      END DO
+    END DO
+
+  END IF
+
+END
